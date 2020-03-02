@@ -40,11 +40,14 @@
 - A1 - *FREE* can be used as digital input/output too
 - A2 - *FREE* can be used as digital input/output too
 - A3 - *FREE* can be used as digital input/output too
-- A4 - I2C SDA (LCD + BME280) - **TODO check signal with scope, add pull-up if required**
-- A5 - I2C SCL (LCD + BME280) - **TODO check signal with scope, add pull-up if required**
+- A4 - I2C SDA (LCD + BME280) - **TODO check signal with scope, add pull-up if required** - Via level shifter 3.3-5V*
+- A5 - I2C SCL (LCD + BME280) - **TODO check signal with scope, add pull-up if required** - Via level shifter 3.3-5V*
 - A6 - *FREE* can be used as digital input/output too
 - A7 - *FREE* can be used as digital input/output too
 - 3V3- NRF24L01-VCC / BME280-VCC
 - GND- NRF24L01-GND
+
+*BME280 devices I own are 3.3V devices. Arduino Nano GPIO operate at 5V. While connecting GPIO's directly to SDA/SCA works most of the time, I noticed long-term instability (I2C bus getting locked & reboot required).
+=> Either use a Arduini Pro Mini @ 3.3V, or use a level shifter.
 
  
