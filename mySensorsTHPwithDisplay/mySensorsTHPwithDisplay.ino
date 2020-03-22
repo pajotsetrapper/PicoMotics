@@ -29,11 +29,11 @@
 
 #include <MySensors.h>
 #include <Wire.h>                     //i2c
-#include <LiquidCrystal_I2C.h>
+#include <LiquidCrystal_I2C.h>        //http://downloads.arduino.cc/libraries/github.com/marcoschwartz/LiquidCrystal_I2C-1.1.2.zip
 #include <OneWire.h>                  //Dallas OneWire protocol
 #include <DallasTemperature.h>        //DS18b20
-#include <BME280I2C.h>                //Bosh BME280
-#include <DFMiniMp3.h>                //DFPlayer mini
+#include <BME280I2C.h>                //Bosh BME280 https://github.com/finitespace/BME280
+#include <DFMiniMp3.h>                //DFPlayer mini https://github.com/Makuna/DFMiniMp3/wiki
 #include <SoftwareSerial.h>           //Serial communication
 #include <avr/wdt.h>
 
