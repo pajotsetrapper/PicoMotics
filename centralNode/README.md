@@ -1,5 +1,3 @@
-# arduinoMoticz
-
 # Purpose of this sketch
 
 Sketch written for an Arduino Mega2560 as part of my domotics. This sketch serves the below purposes:
