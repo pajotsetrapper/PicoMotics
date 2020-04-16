@@ -18,8 +18,11 @@
  * 
  *  Wemos D1 Mini Pro => Was not working with DFPlayer, even not with level shifter => Replaced with Arduino Mega 2560 + Ethernet board
  *  Nokia 5110 LCD display (connected via level shifter). Interface = SPI
- *  DFPlayer Mini - Connected via Serial Port (check PINs)
- *  Rotary encoder with push button (KY-040 Rotary Encoder) - Connected to Interrupt capable pins
+ *  DFPlayer Mini - Connected via Serial Port (check PINs)                                        =====> Connections OK, some jitter (missing resistor on TX/RX, capacitor between VCC & GND)?
+ *  Rotary encoder with push button (KY-040 Rotary Encoder) - Connected to Interrupt capable pins =====> Connections OK (check push button)
+ *  NRF24L01-PA-LNA wireless module                                                               =====> Connections OK 
+ *  BME280 temperature, humidity & pressure sensor (I2C)
+ *  DS18B20 temperature sensor
  *  
  * * DFPlayer mini connections
  * VCC        - 5V
@@ -112,25 +115,62 @@
  *  
 *********************************************************************/
 
-#define LCD_SCLK D0
-#define LCD_DIN  D5
-#define LCD_DC   D6
-#define LCD_RST  D7
-#define LCD_CS   D8
+#define ROTENC_CLK 2 //Interrupt capable
+#define ROTENC_DT  3 //Interrupt capable
+#define ROTENC_SW  4
 
-#define ROTENC_CLK D2 //A0
-#define ROTENC_DT  D3
-#define ROTENC_SW  D4
+#define LCD_CS   5
+#define LCD_RST  6
+#define LCD_DC   7
+#define LCD_DIN  8
+#define LCD_SCLK 9
+#define LCD_LED  10 //PWM
 
-#define DFPLAY_TX D6
-#define DFPLAY_RX D5
+#define DFPLAY_RX 16 //Hardware TX2
+#define DFPLAY_TX 17 //Hardware RX2
 
+#define DS18B20_DATA 18
+
+#define BME280_SDA 20
+#define BME280_SCL 21
+
+#define MY_MAC_ADDRESS 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0x02
+
+// MySensors part
+#define MY_DEBUG
+#define MY_RADIO_RF24
+#define MY_REPEATER_FEATURE
+//#define MY_RX_MESSAGE_BUFFER_FEATURE //does not work with software SPI
+//#define MY_RF24_IRQ_PIN 19 //does not work with software SPI
+
+#if !defined(MY_W5100_SPI_EN) && !defined(ARDUINO_ARCH_SAMD)
+#define MY_SOFTSPI
+#define MY_SOFT_SPI_MISO_PIN 22
+#define MY_SOFT_SPI_MOSI_PIN 24
+#define MY_SOFT_SPI_SCK_PIN 26
+#endif
+
+// When W5100 is connected we have to move CE/CSN pins for NRF radio
+#ifndef MY_RF24_CS_PIN
+#define MY_RF24_CS_PIN 28
+#endif
+#ifndef MY_RF24_CE_PIN
+#define MY_RF24_CE_PIN 30
+#endif
+
+//Configure channel (frequency), transmission power & speed. Lower speed => higher range
+#define MY_RF24_DATARATE (RF24_1MBPS) // RF24_1MBPS for 1Mbps / RF24_2MBPS for 2Mbps // @note nRF24L01, BK2401, BK2421, BK2491 and XN297 does not support RF24_250KBPS
+#define MY_RF24_PA_LEVEL (RF24_PA_MAX) // RF24 PA level for sending msgs // RF24_PA_MIN = -18dBm; RF24_PA_LOW = -12dBm; RF24_PA_HIGH = -6dBm; RF24_PA_MAX = 0dBm
+#define MY_RF24_CHANNEL (85) //Set to 2485Mhz, to be outside of common used Wifi 2.4Ghz Bands & outside of medical device range
+// https://en.wikipedia.org/wiki/List_of_WLAN_channels#2.4_GHz_(802.11b/g/n/ax)
+// https://www.bipt.be/en/operators/radio/frequency-management/frequency-plan/table
+
+#include <MySensors.h>
 #include <SPI.h>
+#include <Encoder.h>                  // Library for rotary encoders
 #include <Adafruit_GFX.h>
 #include <Adafruit_PCD8544.h>
-
 #include <DFMiniMp3.h>                //DFPlayer mini https://github.com/Makuna/DFMiniMp3/wiki
-#include <SoftwareSerial.h>           //Serial communication - used for DFPlayer
  
 class Mp3Notify
 {
@@ -178,10 +218,22 @@ public:
 };
 
 Adafruit_PCD8544 display = Adafruit_PCD8544(LCD_SCLK, LCD_DIN, LCD_DC, LCD_CS, LCD_RST);
-SoftwareSerial mySoftwareSerial(DFPLAY_RX, DFPLAY_TX);
-DFMiniMp3<SoftwareSerial, Mp3Notify> dfplayer(mySoftwareSerial);
+DFMiniMp3<HardwareSerial, Mp3Notify> dfplayer(Serial2);
+Encoder rotaryEncoder(ROTENC_CLK, ROTENC_DT);
+long oldPosition  = -999;
 
-/**
+void waitMilliseconds(uint16_t msWait)
+{
+  uint32_t start = millis();
+  
+  while ((millis() - start) < msWait)
+  {
+    // calling mp3.loop() periodically allows for notifications 
+    // to be handled without interrupts
+    dfplayer.loop(); 
+    delay(1);
+  }
+}
 
 #define NUMFLAKES 10
 #define XPOS 0
@@ -396,7 +448,6 @@ void testdrawline() {
   }
   delay(250);
 }
-**/
 
 void setup(){
   Serial.begin(115200);
@@ -404,10 +455,13 @@ void setup(){
   uint16_t volume = dfplayer.getVolume();
   Serial.print("volume ");
   Serial.println(volume);
-  dfplayer.setVolume(24);  
+  dfplayer.setVolume(18);
   uint16_t count = dfplayer.getTotalTrackCount(DfMp3_PlaySource_Sd);
   Serial.print("Aantal nummers: "); Serial.println(count);
-  /*
+  dfplayer.playMp3FolderTrack(1);    
+  waitMilliseconds(10000);
+
+  /**
   display.begin();
   // init done
 
@@ -517,11 +571,22 @@ void setup(){
   delay(1000); 
 
   // draw a bitmap icon and 'animate' movement
-  testdrawbitmap(logo16_glcd_bmp, LOGO16_GLCD_WIDTH, LOGO16_GLCD_HEIGHT);
-
+  testdrawbitmap(logo16_glcd_bmp, LOGO16_GLCD_WIDTH, LOGO16_GLCD_HEIGHT);  
   */
 }
 
+
+void presentation()
+{
+  //Send the sensor node sketch version information to the gateway
+  sendSketchInfo("MySensors Repeater (remoteDisplay)", "1.0");
+}
+
 void loop()  {
-  dfplayer.loop(); 
+  dfplayer.loop();
+  long newPosition = rotaryEncoder.read();
+  if (newPosition != oldPosition) {
+    oldPosition = newPosition;
+    Serial.println(newPosition);
+  }
 }
