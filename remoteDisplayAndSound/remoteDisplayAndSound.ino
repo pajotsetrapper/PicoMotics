@@ -15,31 +15,63 @@
  * 
  * Hardware used & pinout
  * ----------------------
- *  Wemos D1 Mini Pro
- *  Nokia 5110 LCD display
- *  DFPlayer Mini
- *  Rotary encoder with push button (KY-040 Rotary Encoder)
+ * 
+ *  Wemos D1 Mini Pro => Was not working with DFPlayer, even not with level shifter => Replaced with Arduino Mega 2560 + Ethernet board
+ *  Nokia 5110 LCD display (connected via level shifter). Interface = SPI
+ *  DFPlayer Mini - Connected via Serial Port (check PINs)
+ *  Rotary encoder with push button (KY-040 Rotary Encoder) - Connected to Interrupt capable pins
  *  
- * Display connections
- * 1 VCC      - 3V3      
- * 2 GND .    - GND
- * 3 SCE      - D8
- * 4 RST      - D7
- * 5 D/C      - D6
- * 6 DN(MOSI) - D5
- * 7 SCLK     - D0
- * 8 LED .    - via potmeter naar VCC
- * 
- * Rotary encoder connections
+ * * DFPlayer mini connections
+ * VCC        - 5V
  * GND        - GND
- * +          - 3V3
- * SW         - D4
- * DT         - D3
- * CLK        - D2
+ * TX         - 17 (RX2) 
+ * RX         - 16 (TX2)
  * 
- * DFPlayer mini connections
- * TX         - D1 (RX in SoftSerial)
- * RX         - A0 (TX in SoftSerial)
+ * BME280 Connections
+ * VCC        - 3V3
+ * GND        - GND
+ * SDA        - 20 (SDA) Level switcher
+ * SCL        - 21 (SCL) Level switcher
+ * 
+ * Rotary encoder connections (int pins:  2, 3, 18, 19, 20, 21)
+ * GND        - GND
+ * +          - 5V
+ * SW (button)- 4
+ * DT         - 3
+ * CLK        - 2
+ * 
+ * Display connections
+ * 1 VCC      - 3V3
+ * 2 GND .    - GND
+ * 3 SCE      - 5   - Via Level switcher
+ * 4 RST      - 6   - Via Level switcher
+ * 5 D/C      - 7   - Via Level switcher
+ * 6 DN(MOSI) - 8   - Via Level switcher
+ * 7 SCLK     - 9   - Via Level switcher
+ * 8 LED      - 10  - Via Level switcher (10 supports PWM, so can control brightness)
+ * 
+ * NRF24L01-PA-LNA connections (using a power supply adapter board to provide stable 3.3V)
+ * VCC        - 5V
+ * GND        - GND
+ * IRQ        - 19
+ * MISO       - 22
+ * MOSI       - 24
+ * SCK        - 26
+ * CSN        - 28
+ * CE         - 30
+ * 
+ * DS18B20 Connections
+ * VCC        - 3V3
+ * GND        - GND
+ * Data       - 18
+ Arduino 2560 Pinout:
+ 
+ Input and Output
+ 
+ Each of the 54 digital pins on the Arduino 2560 Mega can be used as an input or output, using pinMode(), digitalWrite(), and digitalRead() functions.
+ They operate at 5 volts. Each pin can provide or receive a maximum of 40 mA and has an internal pull-up resistor (disconnected by default) of 20-50 kOhms.
+
+
  * 
  * Variables   
  *  - BUITEN_TEMP
@@ -80,18 +112,76 @@
  *  
 *********************************************************************/
 
-#include <SPI.h>
-#include <Adafruit_GFX.h>
-#include <Adafruit_PCD8544.h>
-
 #define LCD_SCLK D0
 #define LCD_DIN  D5
 #define LCD_DC   D6
 #define LCD_RST  D7
 #define LCD_CS   D8
 
+#define ROTENC_CLK D2 //A0
+#define ROTENC_DT  D3
+#define ROTENC_SW  D4
+
+#define DFPLAY_TX D6
+#define DFPLAY_RX D5
+
+#include <SPI.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_PCD8544.h>
+
+#include <DFMiniMp3.h>                //DFPlayer mini https://github.com/Makuna/DFMiniMp3/wiki
+#include <SoftwareSerial.h>           //Serial communication - used for DFPlayer
+ 
+class Mp3Notify
+{
+public:
+  static void PrintlnSourceAction(DfMp3_PlaySources source, const char* action)
+  {
+    if (source & DfMp3_PlaySources_Sd) 
+    {
+        Serial.print("SD Card, ");
+    }
+    if (source & DfMp3_PlaySources_Usb) 
+    {
+        Serial.print("USB Disk, ");
+    }
+    if (source & DfMp3_PlaySources_Flash) 
+    {
+        Serial.print("Flash, ");
+    }
+    Serial.println(action);
+  }
+  static void OnError(uint16_t errorCode)
+  {
+    // see DfMp3_Error for code meaning
+    Serial.println();
+    Serial.print("Com Error ");
+    Serial.println(errorCode);
+  }
+  static void OnPlayFinished(DfMp3_PlaySources source, uint16_t track)
+  {
+    Serial.print("Play finished for #");
+    Serial.println(track);  
+  }
+  static void OnPlaySourceOnline(DfMp3_PlaySources source)
+  {
+    PrintlnSourceAction(source, "online");
+  }
+  static void OnPlaySourceInserted(DfMp3_PlaySources source)
+  {
+    PrintlnSourceAction(source, "inserted");
+  }
+  static void OnPlaySourceRemoved(DfMp3_PlaySources source)
+  {
+    PrintlnSourceAction(source, "removed");
+  }
+};
 
 Adafruit_PCD8544 display = Adafruit_PCD8544(LCD_SCLK, LCD_DIN, LCD_DC, LCD_CS, LCD_RST);
+SoftwareSerial mySoftwareSerial(DFPLAY_RX, DFPLAY_TX);
+DFMiniMp3<SoftwareSerial, Mp3Notify> dfplayer(mySoftwareSerial);
+
+/**
 
 #define NUMFLAKES 10
 #define XPOS 0
@@ -306,10 +396,18 @@ void testdrawline() {
   }
   delay(250);
 }
+**/
 
-void setup()   {
-  Serial.begin(9600);
-
+void setup(){
+  Serial.begin(115200);
+  dfplayer.begin();
+  uint16_t volume = dfplayer.getVolume();
+  Serial.print("volume ");
+  Serial.println(volume);
+  dfplayer.setVolume(24);  
+  uint16_t count = dfplayer.getTotalTrackCount(DfMp3_PlaySource_Sd);
+  Serial.print("Aantal nummers: "); Serial.println(count);
+  /*
   display.begin();
   // init done
 
@@ -420,8 +518,10 @@ void setup()   {
 
   // draw a bitmap icon and 'animate' movement
   testdrawbitmap(logo16_glcd_bmp, LOGO16_GLCD_WIDTH, LOGO16_GLCD_HEIGHT);
+
+  */
 }
 
 void loop()  {
-  
+  dfplayer.loop(); 
 }
