@@ -17,12 +17,13 @@
  * ----------------------
  * 
  *  Wemos D1 Mini Pro => Was not working with DFPlayer, even not with level shifter => Replaced with Arduino Mega 2560 + Ethernet board
- *  Nokia 5110 LCD display (connected via level shifter). Interface = SPI
+ *  Nokia 5110 LCD display (connected via level shifter). Interface = SPI                         =====> FAILED FAILED
  *  DFPlayer Mini - Connected via Serial Port (check PINs)                                        =====> Connections OK, some jitter (missing resistor on TX/RX, capacitor between VCC & GND)?
- *  Rotary encoder with push button (KY-040 Rotary Encoder) - Connected to Interrupt capable pins =====> Connections OK (check push button)
+ *  Rotary encoder with push button (KY-040 Rotary Encoder) - Connected to Interrupt capable pins =====> Connections OK
+ *  |-- Rotary encoder push button ((KY-040 Rotary Encoder)                                       =====> TODO
  *  NRF24L01-PA-LNA wireless module                                                               =====> Connections OK 
- *  BME280 temperature, humidity & pressure sensor (I2C)
- *  DS18B20 temperature sensor
+ *  BME280 temperature, humidity & pressure sensor (I2C)                                          =====> Connections OK
+ *  DS18B20 temperature sensor                                                                    =======> Still need to connect !!!!
  *  
  * * DFPlayer mini connections
  * VCC        - 5V
@@ -165,12 +166,26 @@
 // https://en.wikipedia.org/wiki/List_of_WLAN_channels#2.4_GHz_(802.11b/g/n/ax)
 // https://www.bipt.be/en/operators/radio/frequency-management/frequency-plan/table
 
+#define CHILD_ID_TEMP 1
+#define CHILD_ID_HUM 2
+#define CHILD_ID_BARO 3
+
 #include <MySensors.h>
 #include <SPI.h>
 #include <Encoder.h>                  // Library for rotary encoders
 #include <Adafruit_GFX.h>
 #include <Adafruit_PCD8544.h>
 #include <DFMiniMp3.h>                //DFPlayer mini https://github.com/Makuna/DFMiniMp3/wiki
+#include <Wire.h>                     //I2C
+#include <BME280I2C.h>                //Bosh BME280 https://github.com/finitespace/BME280
+#include <OneWire.h>                  //Dallas OneWire protocol
+#include <DallasTemperature.h>        //DS18b20
+
+typedef struct {
+  float temperature;
+  float humidity;
+  float pressure;
+} THPValues;
  
 class Mp3Notify
 {
@@ -221,6 +236,28 @@ Adafruit_PCD8544 display = Adafruit_PCD8544(LCD_SCLK, LCD_DIN, LCD_DC, LCD_CS, L
 DFMiniMp3<HardwareSerial, Mp3Notify> dfplayer(Serial2);
 Encoder rotaryEncoder(ROTENC_CLK, ROTENC_DT);
 long oldPosition  = -999;
+BME280I2C bme;    // Default : forced mode, standby time = 1000 ms
+                  // Oversampling = pressure ×1, temperature ×1, humidity ×1, filter off,
+
+MyMessage temperature_msg(CHILD_ID_TEMP, V_TEMP);
+MyMessage humidity_msg(CHILD_ID_TEMP, V_HUM);
+MyMessage baro_msg(CHILD_ID_BARO, V_PRESSURE);
+unsigned long latest_update_timestamp = 0;
+
+THPValues bmeReadings;
+
+THPValues readBME280()
+{
+   THPValues response;
+   float temp(NAN), hum(NAN), pres(NAN);
+   BME280::TempUnit tempUnit(BME280::TempUnit_Celsius);
+   BME280::PresUnit presUnit(BME280::PresUnit_hPa);
+   bme.read(pres, temp, hum, tempUnit, presUnit);
+   response.pressure = pres;
+   response.temperature = temp;
+   response.humidity = hum;   
+   return (response);
+}
 
 void waitMilliseconds(uint16_t msWait)
 {
@@ -451,6 +488,7 @@ void testdrawline() {
 
 void setup(){
   Serial.begin(115200);
+  
   dfplayer.begin();
   uint16_t volume = dfplayer.getVolume();
   Serial.print("volume ");
@@ -458,9 +496,17 @@ void setup(){
   dfplayer.setVolume(18);
   uint16_t count = dfplayer.getTotalTrackCount(DfMp3_PlaySource_Sd);
   Serial.print("Aantal nummers: "); Serial.println(count);
-  dfplayer.playMp3FolderTrack(1);    
-  waitMilliseconds(10000);
+  dfplayer.playMp3FolderTrack(1);
+  //waitMilliseconds(10000);
 
+  Serial.println("Initialising I2C");
+  Wire.begin();
+  Serial.println("Initialising BME280 over I2C");
+  while(!bme.begin())
+  {
+    Serial.println("Failed to initialise BME280");
+    delay(1000);
+  }
   /**
   display.begin();
   // init done
@@ -579,7 +625,10 @@ void setup(){
 void presentation()
 {
   //Send the sensor node sketch version information to the gateway
-  sendSketchInfo("MySensors Repeater (remoteDisplay)", "1.0");
+  sendSketchInfo("RemoteDisplay", "1.0");
+  present(CHILD_ID_TEMP, S_TEMP);
+  present(CHILD_ID_HUM, S_HUM);
+  present(CHILD_ID_BARO, S_BARO);
 }
 
 void loop()  {
@@ -588,5 +637,13 @@ void loop()  {
   if (newPosition != oldPosition) {
     oldPosition = newPosition;
     Serial.println(newPosition);
+  }
+  if ((millis() - latest_update_timestamp) > 5000){
+    latest_update_timestamp = millis();  
+    Serial.println("Reading BME280 values");
+    bmeReadings = readBME280();
+    Serial.print("BME280 Temperature"); Serial.println(bmeReadings.temperature);
+    Serial.print("BME280 Humidity"); Serial.println(bmeReadings.humidity);
+    Serial.print("BME280 Pressure"); Serial.println(bmeReadings.pressure);
   }
 }
