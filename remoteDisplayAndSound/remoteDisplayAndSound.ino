@@ -1,4 +1,4 @@
-/*********************************************************************
+ /*
  * Purpose
  * -------
  * This sketch implements a device that:
@@ -40,19 +40,19 @@
  * Rotary encoder connections (int pins:  2, 3, 18, 19, 20, 21)
  * GND        - GND
  * +          - 5V
- * SW (button)- 4
+ * SW (button)- 42
  * DT         - 3
  * CLK        - 2
  * 
  * Display connections
  * 1 VCC      - 3V3
- * 2 GND .    - GND
- * 3 SCE      - 5   - Via Level switcher
- * 4 RST      - 6   - Via Level switcher
- * 5 D/C      - 7   - Via Level switcher
- * 6 DN(MOSI) - 8   - Via Level switcher
- * 7 SCLK     - 9   - Via Level switcher
- * 8 LED      - 10  - Via Level switcher (10 supports PWM, so can control brightness)
+ * 2 GND .    - GND                                                                     LVL3V          LVL5V       NIEUW
+ * 3 SCE      - 5   - Via Level switcher                                                Oranje B7      bruin A7     5     32
+ * 4 RST      - 6   - Via Level switcher                                                Geel   B6      zwart A6     6     34
+ * 5 D/C      - 7   - Via Level switcher                                                Groen  B5      wit   A5     7     36
+ * 6 DN(MOSI) - 8   - Via Level switcher                                                Blauw  B4      grijs A4     8     38
+ * 7 SCLK     - 9   - Via Level switcher                                                Paars  B3      paars A3     9     40
+ * 8 LED      - 10  - Via Level switcher (10 supports PWM, so can control brightness)   Grijs  B2      blauw A2     10
  * 
  * NRF24L01-PA-LNA connections (using a power supply adapter board to provide stable 3.3V)
  * VCC        - 5V
@@ -118,13 +118,13 @@
 
 #define ROTENC_CLK 2 //Interrupt capable
 #define ROTENC_DT  3 //Interrupt capable
-#define ROTENC_SW  4
+#define ROTENC_SW  42 //Button on rotary encoder
 
-#define LCD_CS   5
-#define LCD_RST  6
-#define LCD_DC   7
-#define LCD_DIN  8
-#define LCD_SCLK 9
+#define LCD_CS   32
+#define LCD_RST  34
+#define LCD_DC   36
+#define LCD_DIN  38
+#define LCD_SCLK 40
 #define LCD_LED  10 //PWM
 
 #define DFPLAY_RX 16 //Hardware TX2
@@ -180,6 +180,7 @@
 #include <BME280I2C.h>                //Bosh BME280 https://github.com/finitespace/BME280
 #include <OneWire.h>                  //Dallas OneWire protocol
 #include <DallasTemperature.h>        //DS18b20
+#include <Button2.h>                  //https://github.com/LennartHennigs/Button2 Arduino library to simplify working with buttons
 
 typedef struct {
   float temperature;
@@ -238,7 +239,7 @@ Encoder rotaryEncoder(ROTENC_CLK, ROTENC_DT);
 long oldPosition  = -999;
 BME280I2C bme;    // Default : forced mode, standby time = 1000 ms
                   // Oversampling = pressure ×1, temperature ×1, humidity ×1, filter off,
-
+Button2 button = Button2(ROTENC_SW);
 MyMessage temperature_msg(CHILD_ID_TEMP, V_TEMP);
 MyMessage humidity_msg(CHILD_ID_TEMP, V_HUM);
 MyMessage baro_msg(CHILD_ID_BARO, V_PRESSURE);
@@ -272,7 +273,7 @@ void waitMilliseconds(uint16_t msWait)
   }
 }
 
-#define NUMFLAKES 10
+#define NUMFLAKES 2
 #define XPOS 0
 #define YPOS 1
 #define DELTAY 2
@@ -298,72 +299,6 @@ static const unsigned char PROGMEM logo16_glcd_bmp[] =
   B01111100, B11110000,
   B01110000, B01110000,
   B00000000, B00110000 };
-
-void testdrawbitmap(const uint8_t *bitmap, uint8_t w, uint8_t h) {
-  uint8_t icons[NUMFLAKES][3];
-  randomSeed(666);     // whatever seed
- 
-  // initialize
-  for (uint8_t f=0; f< NUMFLAKES; f++) {
-    icons[f][XPOS] = random(display.width());
-    icons[f][YPOS] = 0;
-    icons[f][DELTAY] = random(5) + 1;
-    
-    Serial.print("x: ");
-    Serial.print(icons[f][XPOS], DEC);
-    Serial.print(" y: ");
-    Serial.print(icons[f][YPOS], DEC);
-    Serial.print(" dy: ");
-    Serial.println(icons[f][DELTAY], DEC);
-  }
-
-  while (1) {
-    // draw each icon
-    for (uint8_t f=0; f< NUMFLAKES; f++) {
-      display.drawBitmap(icons[f][XPOS], icons[f][YPOS], logo16_glcd_bmp, w, h, BLACK);
-    }
-    display.display();
-    delay(200);
-
-    while(Serial.available()) {
-        switch (Serial.read()) {
-          case 'w':display.setContrast(display.getContrast() + 1);
-                   break;
-          case 's':if(display.getContrast()) display.setContrast(display.getContrast() - 1);
-                     break;
-          case 'e':display.setBias(display.getBias() + 1);
-                   break;
-          case 'd':if(display.getBias()) display.setBias(display.getBias() - 1);
-                   break;
-          case 'R':display.setReinitInterval(10);
-                   break;
-          case 'r':display.initDisplay();
-                   display.setReinitInterval(0);
-                   break;
-        }
-    }
-    Serial.print("contrast (w/s): 0x");
-    Serial.println(display.getContrast(), HEX);
-    Serial.print("   bias (e/d): 0x");
-    Serial.println(display.getBias(), HEX);
-    Serial.print("   reinitialize display (r/R): 0x");
-    Serial.println(display.getReinitInterval(), HEX);
-
-    // then erase it + move it
-    for (uint8_t f=0; f< NUMFLAKES; f++) {
-      display.drawBitmap(icons[f][XPOS], icons[f][YPOS],  logo16_glcd_bmp, w, h, WHITE);
-      // move it
-      icons[f][YPOS] += icons[f][DELTAY];
-      // if its gone, reinit
-      if (icons[f][YPOS] > display.height()) {
-  icons[f][XPOS] = random(display.width());
-  icons[f][YPOS] = 0;
-  icons[f][DELTAY] = random(5) + 1;
-      }
-    }
-   }
-}
-
 
 void testdrawchar(void) {
   display.setTextSize(1);
@@ -486,10 +421,48 @@ void testdrawline() {
   delay(250);
 }
 
+//Event handlers for button
+void pressed(Button2& btn) {
+    Serial.println("pressed");
+}
+void released(Button2& btn) {
+    Serial.print("released: ");
+    Serial.println(btn.wasPressedFor());
+}
+void changed(Button2& btn) {
+    Serial.println("changed");
+}
+void click(Button2& btn) {
+    Serial.println("click\n");
+}
+void longClick(Button2& btn) {
+    Serial.println("long click\n");
+}
+void doubleClick(Button2& btn) {
+    Serial.println("double click\n");
+}
+void tripleClick(Button2& btn) {
+    Serial.println("triple click\n");
+}
+void tap(Button2& btn) {
+    Serial.println("tap");
+}
+
 void setup(){
   Serial.begin(115200);
+  pinMode(LCD_LED, OUTPUT);  // sets the pin as output  
+  analogWrite(LCD_LED,255);
   
+  button.setChangedHandler(changed);
+  button.setPressedHandler(pressed);
+  button.setReleasedHandler(released);
+  button.setTapHandler(tap);
+  button.setClickHandler(click);
+  button.setLongClickHandler(longClick);
+  button.setDoubleClickHandler(doubleClick);
+  button.setTripleClickHandler(tripleClick);
   dfplayer.begin();
+  
   uint16_t volume = dfplayer.getVolume();
   Serial.print("volume ");
   Serial.println(volume);
@@ -497,8 +470,7 @@ void setup(){
   uint16_t count = dfplayer.getTotalTrackCount(DfMp3_PlaySource_Sd);
   Serial.print("Aantal nummers: "); Serial.println(count);
   dfplayer.playMp3FolderTrack(1);
-  //waitMilliseconds(10000);
-
+  
   Serial.println("Initialising I2C");
   Wire.begin();
   Serial.println("Initialising BME280 over I2C");
@@ -507,76 +479,17 @@ void setup(){
     Serial.println("Failed to initialise BME280");
     delay(1000);
   }
-  /**
+ 
   display.begin();
-  // init done
-
+  
   // you can change the contrast around to adapt the display
   // for the best viewing!
-  display.setContrast(50);
-
+  Serial.print("Display contrast: "); Serial.println(display.getContrast());  
+  display.setContrast(60);  
+  display.clearDisplay();   // clears the screen and buffer
   display.display(); // show splashscreen
   delay(2000);
   display.clearDisplay();   // clears the screen and buffer
-
-  // draw a single pixel
-  display.drawPixel(10, 10, BLACK);
-  display.display();
-  delay(2000);
-  display.clearDisplay();
-
-  // draw many lines
-  testdrawline();
-  display.display();
-  delay(2000);
-  display.clearDisplay();
-
-  // draw rectangles
-  testdrawrect();
-  display.display();
-  delay(2000);
-  display.clearDisplay();
-
-  // draw multiple rectangles
-  testfillrect();
-  display.display();
-  delay(2000);
-  display.clearDisplay();
-
-  // draw mulitple circles
-  testdrawcircle();
-  display.display();
-  delay(2000);
-  display.clearDisplay();
-
-  // draw a circle, 10 pixel radius
-  display.fillCircle(display.width()/2, display.height()/2, 10, BLACK);
-  display.display();
-  delay(2000);
-  display.clearDisplay();
-
-  testdrawroundrect();
-  delay(2000);
-  display.clearDisplay();
-
-  testfillroundrect();
-  delay(2000);
-  display.clearDisplay();
-
-  testdrawtriangle();
-  delay(2000);
-  display.clearDisplay();
-   
-  testfilltriangle();
-  delay(2000);
-  display.clearDisplay();
-
-  // draw the first ~12 characters in the font
-  testdrawchar();
-  display.display();
-  delay(2000);
-  display.clearDisplay();
-
   // text display tests
   display.setTextSize(1);
   display.setTextColor(BLACK);
@@ -589,38 +502,21 @@ void setup(){
   display.print("0x"); display.println(0xDEADBEEF, HEX);
   display.display();
   delay(2000);
+}
 
-  // rotation example
-  display.clearDisplay();
-  display.setRotation(1);  // rotate 90 degrees counter clockwise, can also use values of 2 and 3 to go further.
+void display_something(){ 
+  display.clearDisplay();   // clears the screen and buffer
   display.setTextSize(1);
   display.setTextColor(BLACK);
   display.setCursor(0,0);
-  display.println("Rotation");
+  display.println("Hello, world!");
+  display.setTextColor(WHITE, BLACK); // 'inverted' text
+  display.println(3.141592);
   display.setTextSize(2);
-  display.println("Example!");
+  display.setTextColor(BLACK);
+  display.print("0x"); display.println(0xDEADBEEF, HEX);
   display.display();
-  delay(2000);
-
-  // revert back to no rotation
-  display.setRotation(0);
-
-  // miniature bitmap display
-  display.clearDisplay();
-  display.drawBitmap(30, 16,  logo16_glcd_bmp, 16, 16, 1);
-  display.display();
-
-  // invert the display
-  display.invertDisplay(true);
-  delay(1000); 
-  display.invertDisplay(false);
-  delay(1000); 
-
-  // draw a bitmap icon and 'animate' movement
-  testdrawbitmap(logo16_glcd_bmp, LOGO16_GLCD_WIDTH, LOGO16_GLCD_HEIGHT);  
-  */
 }
-
 
 void presentation()
 {
@@ -633,6 +529,8 @@ void presentation()
 
 void loop()  {
   dfplayer.loop();
+  button.loop();
+  display_something();
   long newPosition = rotaryEncoder.read();
   if (newPosition != oldPosition) {
     oldPosition = newPosition;
@@ -642,8 +540,8 @@ void loop()  {
     latest_update_timestamp = millis();  
     Serial.println("Reading BME280 values");
     bmeReadings = readBME280();
-    Serial.print("BME280 Temperature"); Serial.println(bmeReadings.temperature);
-    Serial.print("BME280 Humidity"); Serial.println(bmeReadings.humidity);
-    Serial.print("BME280 Pressure"); Serial.println(bmeReadings.pressure);
+    Serial.print("BME280 Temperature: "); Serial.println(bmeReadings.temperature);
+    Serial.print("BME280 Humidity: "); Serial.println(bmeReadings.humidity);
+    Serial.print("BME280 Pressure: "); Serial.println(bmeReadings.pressure);
   }
 }
