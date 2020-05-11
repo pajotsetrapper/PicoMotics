@@ -1,3 +1,4 @@
+
  /*
  * Purpose
  * -------
@@ -64,56 +65,11 @@
  * CSN        - 28
  * CE         - 30
  * 
- * DS18B20 Connections
+ * DS18B20 Connections => Not connected yet
  * VCC        - 3V3
  * GND        - GND
  * Data       - 18
- Arduino 2560 Pinout:
- 
- Input and Output
- 
- Each of the 54 digital pins on the Arduino 2560 Mega can be used as an input or output, using pinMode(), digitalWrite(), and digitalRead() functions.
- They operate at 5 volts. Each pin can provide or receive a maximum of 40 mA and has an internal pull-up resistor (disconnected by default) of 20-50 kOhms.
 
-
- * 
- * Variables   
- *  - BUITEN_TEMP
- *  - BUITEN_PRES
- *  - BUITEN_HUM
- *  
- *  - GLV_TEMP
- *  - GLV_PRES
- *  - GLV_HUM
- *  
- *  - SLKPN_TEMP
- *  - SLKPN_PRESS
- *  - SLKPN_HUM
- *  
- *  - SLKTN_TEMP
- *  - SLKTN_PRESS
- *  - SLKTN_HUM
- *  
- *  - KELDER_TEMP
- *  - KELDER_PRESS
- *  - KELDER_HUM
- *  
- *  - SOLAR_POWER
- *  - SOLAR_ENERGY
- *  
- *  - ZONSOPGANG
- *  - ZONSONDERGANG
- *  
- *  - VOORDEUR
- *  - ACHTERDEUR
- *  - POORT_BLB
- *  - POORT_PAM
- *  - SCHUIFRAAM
- *  - BERGING_RAAM
- *  - TOILET_RAAM
- *  - BUREAU_RAAM
- *  - RESET_DAY_MINMAX (aanroepen om min/max temp/vcochtigheid & luchtdruk aan te passen)
- *  
 *********************************************************************/
 
 #define ROTENC_CLK 2 //Interrupt capable
@@ -170,6 +126,8 @@
 #define CHILD_ID_HUM 2
 #define CHILD_ID_BARO 3
 
+#include <Ethernet.h>
+#include <aREST.h>
 #include <MySensors.h>
 #include <SPI.h>
 #include <Encoder.h>                  // Library for rotary encoders
@@ -188,51 +146,55 @@ typedef struct {
   float pressure;
 } THPValues;
  
+
+//Callbacks for DFPlayer events
 class Mp3Notify
 {
-public:
-  static void PrintlnSourceAction(DfMp3_PlaySources source, const char* action)
-  {
-    if (source & DfMp3_PlaySources_Sd) 
+  public:
+    static void PrintlnSourceAction(DfMp3_PlaySources source, const char* action)
     {
-        Serial.print("SD Card, ");
+      if (source & DfMp3_PlaySources_Sd) 
+      {
+          Serial.print("SD Card, ");
+      }
+      if (source & DfMp3_PlaySources_Usb) 
+      {
+          Serial.print("USB Disk, ");
+      }
+      if (source & DfMp3_PlaySources_Flash) 
+      {
+          Serial.print("Flash, ");
+      }
+      Serial.println(action);
     }
-    if (source & DfMp3_PlaySources_Usb) 
+    static void OnError(uint16_t errorCode)
     {
-        Serial.print("USB Disk, ");
+      // see DfMp3_Error for code meaning
+      Serial.println();
+      Serial.print("Com Error ");
+      Serial.println(errorCode);
     }
-    if (source & DfMp3_PlaySources_Flash) 
+    static void OnPlayFinished(DfMp3_PlaySources source, uint16_t track)
     {
-        Serial.print("Flash, ");
+      Serial.print("Play finished for #");
+      Serial.println(track);
     }
-    Serial.println(action);
-  }
-  static void OnError(uint16_t errorCode)
-  {
-    // see DfMp3_Error for code meaning
-    Serial.println();
-    Serial.print("Com Error ");
-    Serial.println(errorCode);
-  }
-  static void OnPlayFinished(DfMp3_PlaySources source, uint16_t track)
-  {
-    Serial.print("Play finished for #");
-    Serial.println(track);  
-  }
-  static void OnPlaySourceOnline(DfMp3_PlaySources source)
-  {
-    PrintlnSourceAction(source, "online");
-  }
-  static void OnPlaySourceInserted(DfMp3_PlaySources source)
-  {
-    PrintlnSourceAction(source, "inserted");
-  }
-  static void OnPlaySourceRemoved(DfMp3_PlaySources source)
-  {
-    PrintlnSourceAction(source, "removed");
-  }
+    static void OnPlaySourceOnline(DfMp3_PlaySources source)
+    {
+      PrintlnSourceAction(source, "online");
+    }
+    static void OnPlaySourceInserted(DfMp3_PlaySources source)
+    {
+      PrintlnSourceAction(source, "inserted");
+    }
+    static void OnPlaySourceRemoved(DfMp3_PlaySources source)
+    {
+      PrintlnSourceAction(source, "removed");
+    }
 };
 
+EthernetServer server = EthernetServer(80); //Ethernet server listening on TCP port 80
+aREST rest = aREST();
 Adafruit_PCD8544 display = Adafruit_PCD8544(LCD_SCLK, LCD_DIN, LCD_DC, LCD_CS, LCD_RST);
 DFMiniMp3<HardwareSerial, Mp3Notify> dfplayer(Serial2);
 Encoder rotaryEncoder(ROTENC_CLK, ROTENC_DT);
@@ -240,10 +202,34 @@ long oldPosition  = -999;
 BME280I2C bme;    // Default : forced mode, standby time = 1000 ms
                   // Oversampling = pressure ×1, temperature ×1, humidity ×1, filter off,
 Button2 button = Button2(ROTENC_SW);
+
+//Messages to send over the mySensors network
 MyMessage temperature_msg(CHILD_ID_TEMP, V_TEMP);
 MyMessage humidity_msg(CHILD_ID_TEMP, V_HUM);
 MyMessage baro_msg(CHILD_ID_BARO, V_PRESSURE);
 unsigned long latest_update_timestamp = 0;
+
+//variables exposed to aREST
+volatile unsigned long switch_voordeur = 0;
+volatile unsigned long switch_achterdeur = 0;
+volatile unsigned long switch_schuifraam = 0;
+volatile unsigned long switch_bergingraam = 0;
+volatile unsigned long switch_toiletraam = 0;
+volatile unsigned long switch_bureauraam = 0;
+volatile unsigned long switch_poortpamel = 0;
+volatile unsigned long switch_poortblb = 0;
+volatile unsigned long temp_outside = 0;
+volatile unsigned long hum_outside = 0;
+volatile unsigned long temp_slaapkamer_master = 0;
+volatile unsigned long hum_slaapkamer_master = 0;
+volatile unsigned long temp_kelder = 0;
+volatile unsigned long hum_kelder = 0;
+volatile unsigned long temp_kamer_thijs = 0;
+volatile unsigned long hum_kamer_thijs = 0;
+volatile unsigned long temp_kamer_niels = 0;
+volatile unsigned long hum_kamer_niels = 0;
+volatile unsigned long solar_kwhday = 0;
+volatile unsigned long solar_power = 0;
 
 THPValues bmeReadings;
 
@@ -273,154 +259,6 @@ void waitMilliseconds(uint16_t msWait)
   }
 }
 
-#define NUMFLAKES 2
-#define XPOS 0
-#define YPOS 1
-#define DELTAY 2
-
-
-#define LOGO16_GLCD_HEIGHT 16
-#define LOGO16_GLCD_WIDTH  16
-
-static const unsigned char PROGMEM logo16_glcd_bmp[] =
-{ B00000000, B11000000,
-  B00000001, B11000000,
-  B00000001, B11000000,
-  B00000011, B11100000,
-  B11110011, B11100000,
-  B11111110, B11111000,
-  B01111110, B11111111,
-  B00110011, B10011111,
-  B00011111, B11111100,
-  B00001101, B01110000,
-  B00011011, B10100000,
-  B00111111, B11100000,
-  B00111111, B11110000,
-  B01111100, B11110000,
-  B01110000, B01110000,
-  B00000000, B00110000 };
-
-void testdrawchar(void) {
-  display.setTextSize(1);
-  display.setTextColor(BLACK);
-  display.setCursor(0,0);
-
-  for (uint8_t i=0; i < 168; i++) {
-    if (i == '\n') continue;
-    display.write(i);
-    //if ((i > 0) && (i % 14 == 0))
-      //display.println();
-  }    
-  display.display();
-}
-
-void testdrawcircle(void) {
-  for (int16_t i=0; i<display.height(); i+=2) {
-    display.drawCircle(display.width()/2, display.height()/2, i, BLACK);
-    display.display();
-  }
-}
-
-void testfillrect(void) {
-  uint8_t color = 1;
-  for (int16_t i=0; i<display.height()/2; i+=3) {
-    // alternate colors
-    display.fillRect(i, i, display.width()-i*2, display.height()-i*2, color%2);
-    display.display();
-    color++;
-  }
-}
-
-void testdrawtriangle(void) {
-  for (int16_t i=0; i<min(display.width(),display.height())/2; i+=5) {
-    display.drawTriangle(display.width()/2, display.height()/2-i,
-                     display.width()/2-i, display.height()/2+i,
-                     display.width()/2+i, display.height()/2+i, BLACK);
-    display.display();
-  }
-}
-
-void testfilltriangle(void) {
-  uint8_t color = BLACK;
-  for (int16_t i=min(display.width(),display.height())/2; i>0; i-=5) {
-    display.fillTriangle(display.width()/2, display.height()/2-i,
-                     display.width()/2-i, display.height()/2+i,
-                     display.width()/2+i, display.height()/2+i, color);
-    if (color == WHITE) color = BLACK;
-    else color = WHITE;
-    display.display();
-  }
-}
-
-void testdrawroundrect(void) {
-  for (int16_t i=0; i<display.height()/2-2; i+=2) {
-    display.drawRoundRect(i, i, display.width()-2*i, display.height()-2*i, display.height()/4, BLACK);
-    display.display();
-  }
-}
-
-void testfillroundrect(void) {
-  uint8_t color = BLACK;
-  for (int16_t i=0; i<display.height()/2-2; i+=2) {
-    display.fillRoundRect(i, i, display.width()-2*i, display.height()-2*i, display.height()/4, color);
-    if (color == WHITE) color = BLACK;
-    else color = WHITE;
-    display.display();
-  }
-}
-   
-void testdrawrect(void) {
-  for (int16_t i=0; i<display.height()/2; i+=2) {
-    display.drawRect(i, i, display.width()-2*i, display.height()-2*i, BLACK);
-    display.display();
-  }
-}
-
-void testdrawline() {  
-  for (int16_t i=0; i<display.width(); i+=4) {
-    display.drawLine(0, 0, i, display.height()-1, BLACK);
-    display.display();
-  }
-  for (int16_t i=0; i<display.height(); i+=4) {
-    display.drawLine(0, 0, display.width()-1, i, BLACK);
-    display.display();
-  }
-  delay(250);
-  
-  display.clearDisplay();
-  for (int16_t i=0; i<display.width(); i+=4) {
-    display.drawLine(0, display.height()-1, i, 0, BLACK);
-    display.display();
-  }
-  for (int8_t i=display.height()-1; i>=0; i-=4) {
-    display.drawLine(0, display.height()-1, display.width()-1, i, BLACK);
-    display.display();
-  }
-  delay(250);
-  
-  display.clearDisplay();
-  for (int16_t i=display.width()-1; i>=0; i-=4) {
-    display.drawLine(display.width()-1, display.height()-1, i, 0, BLACK);
-    display.display();
-  }
-  for (int16_t i=display.height()-1; i>=0; i-=4) {
-    display.drawLine(display.width()-1, display.height()-1, 0, i, BLACK);
-    display.display();
-  }
-  delay(250);
-
-  display.clearDisplay();
-  for (int16_t i=0; i<display.height(); i+=4) {
-    display.drawLine(display.width()-1, 0, 0, i, BLACK);
-    display.display();
-  }
-  for (int16_t i=0; i<display.width(); i+=4) {
-    display.drawLine(display.width()-1, 0, i, display.height()-1, BLACK); 
-    display.display();
-  }
-  delay(250);
-}
-
 //Event handlers for button
 void pressed(Button2& btn) {
     Serial.println("pressed");
@@ -448,11 +286,95 @@ void tap(Button2& btn) {
     Serial.println("tap");
 }
 
+void display_something(){ 
+  display.setContrast(60);  
+  display.clearDisplay();   // clears the screen and buffer
+  display.setTextSize(1);
+  display.setTextColor(BLACK);
+  display.setCursor(0,0);
+  display.println("Hello, world!");
+  display.setTextColor(WHITE, BLACK); // 'inverted' text
+  display.println(3.141592);
+  display.setTextSize(2);
+  display.setTextColor(BLACK);
+  display.print("0x"); display.println(0xDEADBEEF, HEX);
+  display.display();
+}
+
+int playSound(String command) {  
+  int tracknumber = 0;
+  tracknumber = command.toInt();
+  dfplayer.playMp3FolderTrack(tracknumber);
+  return 0;
+}
+
+int changeVolume(String command) {  
+  int volume = 0;
+  volume = command.toInt();
+  if ((volume >=0) and (volume <=32)){
+    dfplayer.setVolume(volume);
+  }
+  return 0;
+}
+
 void setup(){
   Serial.begin(115200);
-  pinMode(LCD_LED, OUTPUT);  // sets the pin as output  
-  analogWrite(LCD_LED,255);
+
+  byte mac[] = {
+  0x00, 0xAA, 0xBB, 0xCC, 0xDE, 0x02
+  };
   
+  if (Ethernet.begin(mac) == 0) {
+  Serial.println("Failed to configure Ethernet using DHCP");
+  if (Ethernet.hardwareStatus() == EthernetNoHardware) {
+    Serial.println("Ethernet shield was not found.  Sorry, can't run without hardware. :(");
+    } 
+    else if (Ethernet.linkStatus() == LinkOFF) {
+      Serial.println("Ethernet cable is not connected.");
+    }
+  }
+  // print your local IP address:
+  Serial.print("My IP address: ");
+  Serial.println(Ethernet.localIP());
+  
+  // REST interface: Give name & ID to the device (ID should be 6 characters long)
+  rest.set_id("111000");
+  rest.set_name((char*)"remoteDisplaySound");
+  
+  rest.function((char*)"playSound", playSound); // register function to REST interface
+  rest.function((char*)"changeVolume", changeVolume);
+  
+  //Door & Window switches
+  rest.variable("switch_voordeur",&switch_voordeur);
+  rest.variable("switch_achterdeur",&switch_achterdeur);
+  rest.variable("switch_schuifraam",&switch_schuifraam);
+  rest.variable("switch_bergingraam",&switch_bergingraam);
+  rest.variable("switch_toiletraam",&switch_toiletraam);
+  rest.variable("switch_bureauraam",&switch_bureauraam);
+  rest.variable("switch_poortpamel",&switch_poortpamel);
+  rest.variable("switch_poortblb",&switch_poortblb);
+  
+  //Temperature & humidity sensors
+  rest.variable("temp_outside",&temp_outside);
+  rest.variable("hum_outside",&hum_outside);  
+  rest.variable("temp_slaapkamer_master",&temp_slaapkamer_master);  
+  rest.variable("hum_slaapkamer_master",&hum_slaapkamer_master);  
+  rest.variable("temp_kelder",&temp_kelder);
+  rest.variable("hum_kelder",&hum_kelder);
+  rest.variable("temp_kamer_thijs",&temp_kamer_thijs);  
+  rest.variable("hum_kamer_thijs",&hum_kamer_thijs);
+  rest.variable("temp_kamer_niels",&temp_kamer_niels);  
+  rest.variable("hum_kamer_niels",&hum_kamer_niels);  
+  rest.variable("solar_kwhday",&solar_kwhday);
+  rest.variable("solar_power",&solar_power);
+  
+  //Start ethernet server
+  server.begin();
+  
+  pinMode(LCD_LED, OUTPUT);  // sets the pin as output  
+  analogWrite(LCD_LED,255);  // Enable backlight, full power
+
+  //Set callbacks for the push button
   button.setChangedHandler(changed);
   button.setPressedHandler(pressed);
   button.setReleasedHandler(released);
@@ -461,61 +383,23 @@ void setup(){
   button.setLongClickHandler(longClick);
   button.setDoubleClickHandler(doubleClick);
   button.setTripleClickHandler(tripleClick);
+  
   dfplayer.begin();
+  display_something();
   
   uint16_t volume = dfplayer.getVolume();
   Serial.print("volume ");
   Serial.println(volume);
-  dfplayer.setVolume(18);
-  uint16_t count = dfplayer.getTotalTrackCount(DfMp3_PlaySource_Sd);
-  Serial.print("Aantal nummers: "); Serial.println(count);
+  dfplayer.setVolume(18);  
   dfplayer.playMp3FolderTrack(1);
-  
-  Serial.println("Initialising I2C");
+
+  //I2C initialisation  
   Wire.begin();
-  Serial.println("Initialising BME280 over I2C");
   while(!bme.begin())
   {
     Serial.println("Failed to initialise BME280");
     delay(1000);
   }
- 
-  display.begin();
-  
-  // you can change the contrast around to adapt the display
-  // for the best viewing!
-  Serial.print("Display contrast: "); Serial.println(display.getContrast());  
-  display.setContrast(60);  
-  display.clearDisplay();   // clears the screen and buffer
-  display.display(); // show splashscreen
-  delay(2000);
-  display.clearDisplay();   // clears the screen and buffer
-  // text display tests
-  display.setTextSize(1);
-  display.setTextColor(BLACK);
-  display.setCursor(0,0);
-  display.println("Hello, world!");
-  display.setTextColor(WHITE, BLACK); // 'inverted' text
-  display.println(3.141592);
-  display.setTextSize(2);
-  display.setTextColor(BLACK);
-  display.print("0x"); display.println(0xDEADBEEF, HEX);
-  display.display();
-  delay(2000);
-}
-
-void display_something(){ 
-  display.clearDisplay();   // clears the screen and buffer
-  display.setTextSize(1);
-  display.setTextColor(BLACK);
-  display.setCursor(0,0);
-  display.println("Hello, world!");
-  display.setTextColor(WHITE, BLACK); // 'inverted' text
-  display.println(3.141592);
-  display.setTextSize(2);
-  display.setTextColor(BLACK);
-  display.print("0x"); display.println(0xDEADBEEF, HEX);
-  display.display();
 }
 
 void presentation()
@@ -530,7 +414,6 @@ void presentation()
 void loop()  {
   dfplayer.loop();
   button.loop();
-  display_something();
   long newPosition = rotaryEncoder.read();
   if (newPosition != oldPosition) {
     oldPosition = newPosition;
