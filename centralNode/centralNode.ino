@@ -1,5 +1,4 @@
-/*
-   Copyright Pieter Coppens - 2019
+/*   Copyright Pieter Coppens - 2019
 */
 
 //MySensors Gateway (based on sample sketch)
@@ -35,8 +34,7 @@
 
 // The port to keep open on node server mode / or port to contact in client mode
 #define MY_PORT 5003
-//#define MY_MAC_ADDRESS 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xF1
-#define MY_MAC_ADDRESS 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0x00 //Aduino in Domoticz case (technische ruimte)
+byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0x00}; //Arduino in Domoticz case (technische ruimte)
 
 //Congigure channel (frequency), transmission power & speed. Lower speed => higher range
 #define MY_RF24_DATARATE (RF24_1MBPS) // RF24_1MBPS for 1Mbps / RF24_2MBPS for 2Mbps // @note nRF24L01, BK2401, BK2421, BK2491 and XN297 does not support RF24_250KBPS
@@ -68,9 +66,11 @@
 #define CHILD_ID_WATER 2
 #define CHILD_ID_GAS 3
 #define CHILD_ID_PERSISTED_CONFIG 4
+
 #define SOLAR_PIN 19
 #define WATER_PIN 20
 #define GAS_PIN 21
+
 #define PULSE_FACTOR_SOLAR 1000 // Number of pulses/kWH
 #define PULSE_FACTOR_GAS   100  // 1 pulse = 0.01m³, 
 #define PULSE_FACTOR_WATER 2000 // 2000 pulses per m³ //https://www.elster.nl/downloads/kent_6961_Elster_V100_04_07_03.pdf
@@ -106,6 +106,43 @@ unsigned long debounce_time_solar = 80; //debounce time in ms - according to spe
 unsigned long debounce_time_water = 500; //debounce time in ms
 unsigned long debounce_time_gas = 500;   //debounce time in ms
 volatile unsigned long controllerUpdateTimeStamp = 0;
+
+class Sensor{
+  public:
+    int pin;
+    int mysensors_child_id;
+    mysensors_sensor_t mysensors_type;
+    mysensors_data_t mysensors_variable_type;
+    int state=0;
+    int previous_state=99;
+    unsigned long latestChangeTimeStamp = 0;
+
+    Sensor(int pin, int mysensors_child_id, mysensors_sensor_t mysensors_sensor_type, mysensors_data_t mysensors_variable_type){
+      pin = pin;
+      mysensors_child_id = mysensors_child_id;
+      mysensors_sensor_type = mysensors_sensor_type;
+      mysensors_variable_type = mysensors_variable_type;
+    }
+    void presentToMySensors(){
+      present(mysensors_child_id, mysensors_type);
+    }
+
+    void sendToController(){    
+      MyMessage msg(mysensors_child_id, mysensors_variable_type);
+      send(msg.set(state));
+    }
+};
+
+Sensor PIR_1 = Sensor(2, 5, S_MOTION, V_TRIPPED);
+Sensor PIR_2 = Sensor(3, 6, S_MOTION, V_TRIPPED);
+Sensor PIR_3 = Sensor(4, 7, S_MOTION, V_TRIPPED);
+Sensor PIR_4 = Sensor(5, 8, S_MOTION, V_TRIPPED);
+Sensor PIR_5 = Sensor(6, 9, S_MOTION, V_TRIPPED);
+Sensor POORT_BLB = Sensor(10, 10, S_DOOR, V_TRIPPED);
+Sensor POORT_PAM = Sensor(11, 11, S_DOOR, V_TRIPPED);
+
+Sensor wiredSensors[] = {PIR_1, PIR_2, PIR_3, PIR_4,PIR_5, POORT_BLB,POORT_PAM};
+
 long updateInterval = 300; //Minimum time between sending updates for local sensors to the controller
 
 MyMessage solar_power_msg(CHILD_ID_SOLAR, V_WATT);
@@ -201,6 +238,10 @@ void presentation()
   present(CHILD_ID_WATER, S_WATER); //V_FLOW, V_VOLUME
   present(CHILD_ID_GAS, S_GAS);     //V_FLOW, V_VOLUME
   present(CHILD_ID_PERSISTED_CONFIG, S_CUSTOM); //Used to persist config info, such as updateInterval (and maybe afterwards extend to debounce time for solar, water, gas).
+
+  for (int idx=0; idx < 7; idx++){
+    wiredSensors[idx].presentToMySensors();
+  }
 }
 
 void isr_solar_pulse() {  
@@ -246,14 +287,18 @@ void isr_gas_pulse() {
 
 void setup(void)
 {
+  pinMode(SOLAR_PIN, INPUT_PULLUP);
+  pinMode(WATER_PIN, INPUT_PULLUP);
+  pinMode(GAS_PIN, INPUT);
+  
   //set PINmodes for connected relays + set value to high (inverted logic in relay)
   for (int pin = 22; pin <= 37; pin++) {
     pinMode (pin, OUTPUT);
     digitalWrite(pin, HIGH);
   }
-  pinMode(SOLAR_PIN, INPUT_PULLUP);
-  pinMode(WATER_PIN, INPUT_PULLUP);
-  pinMode(GAS_PIN, INPUT);
+  for (int idx=0; idx < 7; idx++){
+    pinMode(wiredSensors[idx].pin, INPUT_PULLUP);    
+  }
 
   //initialize values in togglePinDelays
   for (int pin = 22; pin <= 37; pin++) {
@@ -271,6 +316,12 @@ void setup(void)
   rest.variable("water",&waterPulseCounter);
   rest.variable("gas",&gasPulseCounter);
   rest.variable("updateInterval", &updateInterval); //Update interval in seconds
+
+
+  if (Ethernet.begin(mac) == 0) {
+    Serial.println("Failed to configure Ethernet using DHCP");
+  }
+  
   server.begin();
   // Start watchdog with 8s timeout
   wdt_enable(WDTO_8S);
@@ -352,12 +403,28 @@ void receive(const MyMessage &message)
   }
 }
 
+void handleMotionAndDoorSwitches(){
+  for (int idx=0; idx < 7; idx++){    
+    wiredSensors[idx].state = digitalRead(wiredSensors[idx].pin);
+    if (wiredSensors[idx].state != wiredSensors[idx].previous_state){
+      if ((millis() - wiredSensors[idx].latestChangeTimeStamp) < 100){
+         //debounce
+      }
+      else{
+        wiredSensors[idx].latestChangeTimeStamp = millis();
+        wiredSensors[idx].previous_state = wiredSensors[idx].state;
+        wiredSensors[idx].sendToController();
+      }
+    }
+  }
+}
+
 void loop() {
   unsigned long now = millis();
   EthernetClient client = server.available();
   rest.handle(client);
   checkPulseDelays();
-  
+  handleMotionAndDoorSwitches();  
   if ((now - controllerUpdateTimeStamp) >= (unsigned long)updateInterval*1000) { //Send values for local sensors to controller max every updateInterval
     
     //Set flow to 0 for the various sensors after not getting an update for x time (otherwise flow/power message would be stuck to last known value calculated in the ISR.
