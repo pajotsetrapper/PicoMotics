@@ -79,6 +79,8 @@ byte mac[] = {0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0x00}; //Arduino in Domoticz case (t
 #define WATER_FLOW_MAX 40     //liter/min
 #define GAS_FLOW_MAX 100      //liter/min (meter can max handle 6m3/h)
 
+#define NBR_WIRED_SENSORS 3   //Number of wired sensors handled by the Sensor class
+
 #include <Ethernet.h>
 #include <MySensors.h>
 #include <SPI.h>
@@ -117,12 +119,13 @@ class Sensor{
     int previous_state=99;
     unsigned long latestChangeTimeStamp = 0;
 
-    Sensor(int pin, int mysensors_child_id, mysensors_sensor_t mysensors_sensor_type, mysensors_data_t mysensors_variable_type){
-      pin = pin;
-      mysensors_child_id = mysensors_child_id;
-      mysensors_sensor_type = mysensors_sensor_type;
-      mysensors_variable_type = mysensors_variable_type;
+    Sensor(int p_pin, int p_mysensors_child_id, mysensors_sensor_t p_mysensors_sensor_type, mysensors_data_t p_mysensors_variable_type){
+      pin = p_pin;
+      mysensors_child_id = p_mysensors_child_id;
+      mysensors_type = p_mysensors_sensor_type;
+      mysensors_variable_type = p_mysensors_variable_type;
     }
+
     void presentToMySensors(){
       present(mysensors_child_id, mysensors_type);
       Serial.print("Presenting sensor with child-id: "); Serial.print(mysensors_child_id); Serial.print(" and value ");Serial.println(state);
@@ -136,16 +139,18 @@ class Sensor{
 };
 
 //Sensor(int pin, int mysensors_child_id, mysensors_sensor_t mysensors_sensor_type, mysensors_data_t mysensors_variable_type){
-Sensor PIR_1 = Sensor(2, 5, S_MOTION, V_TRIPPED);
-Sensor PIR_2 = Sensor(3, 6, S_MOTION, V_TRIPPED);
-Sensor PIR_3 = Sensor(4, 7, S_MOTION, V_TRIPPED);
-/*
-Sensor PIR_4 = Sensor(5, 8, S_MOTION, V_TRIPPED);
-Sensor PIR_5 = Sensor(6, 9, S_MOTION, V_TRIPPED);
-Sensor POORT_BLB = Sensor(10, 10, S_DOOR, V_TRIPPED);
-Sensor POORT_PAM = Sensor(11, 11, S_DOOR, V_TRIPPED);
-*/
-Sensor wiredSensors[] = {PIR_1, PIR_2, PIR_3};
+
+Sensor wiredSensors[] = {
+  Sensor(2, 5, S_MOTION, V_TRIPPED), //Hall
+  Sensor(3, 6, S_MOTION, V_TRIPPED), //Living
+  Sensor(4, 7, S_MOTION, V_TRIPPED)  //Office
+  /*
+  Sensor(5, 8, S_MOTION, V_TRIPPED),
+  Sensor(6, 9, S_MOTION, V_TRIPPED),
+  Sensor(10, 10, S_DOOR, V_TRIPPED),
+  Sensor(11, 11, S_DOOR, V_TRIPPED)
+  */
+};
 
 long updateInterval = 300; //Minimum time between sending updates for local sensors to the controller
 
@@ -243,7 +248,7 @@ void presentation()
   present(CHILD_ID_GAS, S_GAS);     //V_FLOW, V_VOLUME
   present(CHILD_ID_PERSISTED_CONFIG, S_CUSTOM); //Used to persist config info, such as updateInterval (and maybe afterwards extend to debounce time for solar, water, gas).
 
-  for (int idx=0; idx < 3; idx++){
+  for (int idx=0; idx < NBR_WIRED_SENSORS; idx++){
     wiredSensors[idx].presentToMySensors();    
   }
 }
@@ -300,7 +305,7 @@ void setup(void)
     pinMode (pin, OUTPUT);
     digitalWrite(pin, HIGH);
   }
-  for (int idx=0; idx < 3; idx++){
+  for (int idx=0; idx < NBR_WIRED_SENSORS; idx++){
     pinMode(wiredSensors[idx].pin, INPUT);//Only ones used for now are PIR sensors, no pullup required
   }
 
@@ -408,7 +413,7 @@ void receive(const MyMessage &message)
 }
 
 void handleMotionAndDoorSwitches(){
-  for (int idx=0; idx < 3; idx++){    
+  for (int idx=0; idx < NBR_WIRED_SENSORS; idx++){    
     wiredSensors[idx].state = digitalRead(wiredSensors[idx].pin);
     if (wiredSensors[idx].state != wiredSensors[idx].previous_state){
       if ((millis() - wiredSensors[idx].latestChangeTimeStamp) < 500){
