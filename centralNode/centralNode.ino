@@ -128,11 +128,11 @@ class Sensor{
 
     void presentToMySensors(){
       present(mysensors_child_id, mysensors_type);
-      Serial.print("Presenting sensor with child-id: "); Serial.print(mysensors_child_id); Serial.print(" and value ");Serial.println(state);
+      //Serial.print("Presenting sensor with child-id: "); Serial.print(mysensors_child_id); Serial.print(" and value ");Serial.println(state);
     }
 
     void sendToController(){    
-      Serial.print("Sending data to controller: child_id= "); Serial.print(mysensors_child_id); Serial.print(" and type ");Serial.println(mysensors_type);
+      //Serial.print("Sending data to controller: child_id= "); Serial.print(mysensors_child_id); Serial.print(" and type ");Serial.println(mysensors_type);
       MyMessage msg(mysensors_child_id, mysensors_variable_type);
       send(msg.set(state));
     }
@@ -328,7 +328,7 @@ void setup(void)
 
 
   if (Ethernet.begin(mac) == 0) {
-    Serial.println("Failed to configure Ethernet using DHCP");
+    //Serial.println("Failed to configure Ethernet using DHCP");
   }
   
   server.begin();
