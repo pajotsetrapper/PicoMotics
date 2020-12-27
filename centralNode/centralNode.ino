@@ -125,9 +125,11 @@ class Sensor{
     }
     void presentToMySensors(){
       present(mysensors_child_id, mysensors_type);
+      Serial.print("Presenting sensor with child-id: "); Serial.print(mysensors_child_id); Serial.print(" and value ");Serial.println(state);
     }
 
     void sendToController(){    
+      Serial.print("Sending data to controller: child_id= "); Serial.print(mysensors_child_id); Serial.print(" and type ");Serial.println(mysensors_type);
       MyMessage msg(mysensors_child_id, mysensors_variable_type);
       send(msg.set(state));
     }
@@ -242,7 +244,7 @@ void presentation()
   present(CHILD_ID_PERSISTED_CONFIG, S_CUSTOM); //Used to persist config info, such as updateInterval (and maybe afterwards extend to debounce time for solar, water, gas).
 
   for (int idx=0; idx < 3; idx++){
-    wiredSensors[idx].presentToMySensors();
+    wiredSensors[idx].presentToMySensors();    
   }
 }
 
