@@ -297,7 +297,7 @@ void setup(void)
     digitalWrite(pin, HIGH);
   }
   for (int idx=0; idx < 7; idx++){
-    pinMode(wiredSensors[idx].pin, INPUT_PULLUP);    
+    pinMode(wiredSensors[idx].pin, INPUT);//Only ones used for now are PIR sensors, no pullup required
   }
 
   //initialize values in togglePinDelays
