@@ -15,7 +15,7 @@ Sketch written for an Arduino Mega2560 as part of my domotics. This sketch serve
 3. For pulse counting - the pins below have been configured
    - PIN 19:  Configured as input with internal pull-up to VCC (5V) => Connected to S0 (open collector interface of energy meter)
    - PIN 20:  Configured as input with internal pull-up to VCC (5V) => Connected to reed switch on water meter
-   - PIN 21:  Configured as input - planing to use a hall-effect sensor with digital output to count gas pulses (as magnet in meter
+   - PIN 21:  Configured as input - planning to use a hall-effect sensor with digital output to count gas pulses (as magnet in meter
               is too weak to activate a reed switch)
 4. a NRF24 (NFR24-PA-LNA) module for wireless communication (MySensors):
    Connecting the NRF24L01 :
@@ -26,6 +26,14 @@ Sketch written for an Arduino Mega2560 as part of my domotics. This sketch serve
    - PIN 18 NRF module SOFT SPI CS
    - !! Provide a stable 3.3V to the module & solder a capacitor on the 3.3V supply (>=200µF as close as possible to the
     module)
+5. PIN 2->6 and PIN 10-11: used for wired motion sensors & door switches (PIR HC-SR501 / Standard switch)
+   - 2: Front door
+   - 3: Hall
+   - 4: Office
+   - 5: Unused
+   - 6: Unused
+   - 10: Unused
+   - 11: Unused
     
 # RF configuration (hard-coded in sketch)
 

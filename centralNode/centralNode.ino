@@ -133,15 +133,17 @@ class Sensor{
     }
 };
 
+//Sensor(int pin, int mysensors_child_id, mysensors_sensor_t mysensors_sensor_type, mysensors_data_t mysensors_variable_type){
 Sensor PIR_1 = Sensor(2, 5, S_MOTION, V_TRIPPED);
 Sensor PIR_2 = Sensor(3, 6, S_MOTION, V_TRIPPED);
 Sensor PIR_3 = Sensor(4, 7, S_MOTION, V_TRIPPED);
+/*
 Sensor PIR_4 = Sensor(5, 8, S_MOTION, V_TRIPPED);
 Sensor PIR_5 = Sensor(6, 9, S_MOTION, V_TRIPPED);
 Sensor POORT_BLB = Sensor(10, 10, S_DOOR, V_TRIPPED);
 Sensor POORT_PAM = Sensor(11, 11, S_DOOR, V_TRIPPED);
-
-Sensor wiredSensors[] = {PIR_1, PIR_2, PIR_3, PIR_4,PIR_5, POORT_BLB,POORT_PAM};
+*/
+Sensor wiredSensors[] = {PIR_1, PIR_2, PIR_3};
 
 long updateInterval = 300; //Minimum time between sending updates for local sensors to the controller
 
@@ -239,7 +241,7 @@ void presentation()
   present(CHILD_ID_GAS, S_GAS);     //V_FLOW, V_VOLUME
   present(CHILD_ID_PERSISTED_CONFIG, S_CUSTOM); //Used to persist config info, such as updateInterval (and maybe afterwards extend to debounce time for solar, water, gas).
 
-  for (int idx=0; idx < 7; idx++){
+  for (int idx=0; idx < 3; idx++){
     wiredSensors[idx].presentToMySensors();
   }
 }
@@ -296,7 +298,7 @@ void setup(void)
     pinMode (pin, OUTPUT);
     digitalWrite(pin, HIGH);
   }
-  for (int idx=0; idx < 7; idx++){
+  for (int idx=0; idx < 3; idx++){
     pinMode(wiredSensors[idx].pin, INPUT);//Only ones used for now are PIR sensors, no pullup required
   }
 
@@ -404,11 +406,11 @@ void receive(const MyMessage &message)
 }
 
 void handleMotionAndDoorSwitches(){
-  for (int idx=0; idx < 7; idx++){    
+  for (int idx=0; idx < 3; idx++){    
     wiredSensors[idx].state = digitalRead(wiredSensors[idx].pin);
     if (wiredSensors[idx].state != wiredSensors[idx].previous_state){
-      if ((millis() - wiredSensors[idx].latestChangeTimeStamp) < 100){
-         //debounce
+      if ((millis() - wiredSensors[idx].latestChangeTimeStamp) < 500){
+         //debounce (500ms, those signals are slow by nature anyhow
       }
       else{
         wiredSensors[idx].latestChangeTimeStamp = millis();
