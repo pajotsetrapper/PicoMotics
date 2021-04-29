@@ -1,0 +1,51 @@
+// Converted an air humidifier in a connected device using a Wemos D1 Pro Mini running ESPEasy.
+// 3 devices
+//  - Switch input - GPIO13: Input - switch for indicating the water tank is empty
+//  - Relay output, connected to GPIO5
+//  - Generic dummy device, type variables - vars for HumidLowerLimit, HumidUpperLimit, HumidCurrentTarget & Humidity
+//  - Generic dummy device, type variable - heaterOn For indicating the heater is on (it is a boiler basically)
+//  - Connects to Domoticz as a controller, sends the HeaterOn & state of the water tank to virtual Domoticz devices 
+// SCript used as rule in ESPEasy to make this all 'live'
+
+
+On System#Boot do
+  gpio,5,0 // Ensure cooker is off
+  TaskValueSet 3,1,0
+  timerSet,1,10 // Start timer with 10 second interval
+EndOn
+
+On Rules#Timer=1 do
+
+  //Define the desired humidity
+  TaskValueSet 2,1,42 //Set humidity lower limit
+  TaskValueSet 2,2,45 //Set humidity upper limit (hysteresis = upper-lower)
+
+  //Take care of hysteresis by setting current desired humidity
+  if [Variables#Humidity]>=[Variables#HumidUpperLimit]
+    TaskValueSet 2,3,[Variables#HumidLowerLimit]
+  endif
+
+  if [Variables#Humidity]<=[Variables#HumidLowerLimit]
+    TaskValueSet 2,3,[Variables#HumidUpperLimit]
+  endif
+
+
+  //Enable cooker when too dry, unless tank is empty
+  if [Variables#Humidity]<[Variables#HumidCurrentTarget] and [TankLeeg#State]=0
+    gpio,5,1 //enable cooker
+    TaskValueSet 3,1,1
+  else
+    gpio,5,0 //disable cooker
+        TaskValueSet 3,1,0
+  endif
+  
+  //Make sure to check again in 10 seconds
+  timerSet,1,10
+EndOn
+
+
+//Disable cooker immediately when out of water!!
+On TankLeeg#State=1 do
+   gpio,5,0
+   TaskValueSet 3,1,0
+EndOn
