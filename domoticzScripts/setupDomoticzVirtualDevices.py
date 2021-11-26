@@ -95,12 +95,12 @@ if __name__ == '__main__':
         Device('VerlichtingSLKPN', pTypeGeneralSwitch,sSwitchGeneralSwitch , idx=None, onActionURL='http://domoticzarduino.lan/pulse?params=35', offActionURL='http://domoticzarduino.lan/pulse?params=35'),
         Device('VerlichtingSLKN', pTypeGeneralSwitch,sSwitchGeneralSwitch , idx=None, onActionURL='http://domoticzarduino.lan/pulse?params=36', offActionURL='http://domoticzarduino.lan/pulse?params=36'),
         Device('VerlichtingSLKT', pTypeGeneralSwitch,sSwitchGeneralSwitch , idx=None, onActionURL='http://domoticzarduino.lan/pulse?params=37', offActionURL='http://domoticzarduino.lan/pulse?params=37'),
-        Device('sVoordeur', pTypeGeneralSwitch,sSwitchGeneralSwitch, idx=None),
-        Device('sAchterdeur', pTypeGeneralSwitch,sSwitchGeneralSwitch, idx=None),
-        Device('sRaam Berging', pTypeGeneralSwitch,sSwitchGeneralSwitch, idx=None),
-        Device('sSchuifraam', pTypeGeneralSwitch,sSwitchGeneralSwitch, idx=None),
-        Device('sLuchtbevochtiger actief', pTypeGeneralSwitch,sSwitchGeneralSwitch, idx=None),
-        Device('sLuchtbevochtiger - tank vullen', pTypeGeneralSwitch,sSwitchGeneralSwitch, idx=None),        
+        Device('Voordeur', pTypeGeneralSwitch,sSwitchGeneralSwitch, idx=None),
+        Device('Achterdeur', pTypeGeneralSwitch,sSwitchGeneralSwitch, idx=None),
+        Device('Raam berging', pTypeGeneralSwitch,sSwitchGeneralSwitch, idx=None),
+        Device('Schuifraam', pTypeGeneralSwitch,sSwitchGeneralSwitch, idx=None),
+        Device('Luchtbevochtiger actief', pTypeGeneralSwitch,sSwitchGeneralSwitch, idx=None),
+        Device('Luchtbevochtiger - tank vullen', pTypeGeneralSwitch,sSwitchGeneralSwitch, idx=None), 
     )
 
     sensorsToCreate = (
