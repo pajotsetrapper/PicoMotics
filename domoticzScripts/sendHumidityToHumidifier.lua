@@ -24,8 +24,8 @@ return {
 	-- Dummy device set on task 2. Value 4 = humidity
 
 		if (item.isTimer) then
-		    --local temperature = domoticz.devices('Klimaat-Bureau').temperature
-		    local humidity = domoticz.round(domoticz.devices('Klimaat-Bureau').humidity, 0)
+		    --local temperature = domoticz.devices('Klimaat gelijkvloers').temperature
+		    local humidity = domoticz.round(domoticz.devices('Klimaat gelijkvloers').humidity, 0)
 
 
 			domoticz.openURL({
