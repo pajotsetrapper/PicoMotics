@@ -4,13 +4,12 @@ return {
 		timer = {
 			-- 'every minute',	-- uses sunset/sunrise info from Domoticz
 			'10 minutes before sunset', --zon uit, licht aan
-			'every 20 minutes between sunset and 22:00', -- zonsondergang tot slapen
-			'every 40 minutes between sunset and 22:00', -- to the loo
-			'every 60 minutes between sunset and 22:00', -- berging
-			'every 120 minutes between sunset and 22:00', -- keldertrap
+			'every 30 minutes between sunset and 22:00', -- to the loo
+			'every hour between sunset and 22:00', -- berging
+			'every 2 hours between sunset and 22:00', -- keldertrap
 			'at 20:50', -- kids to bed
 			'at 22:00', -- up we go
-			'every 120 minutes between 23:00 and sunrise', -- tijdens de nacht
+			'every 2 hours between 23:00 and sunrise', -- tijdens de nacht
 		},
 		security = {
 		    domoticz.SECURITY_ARMEDAWAY,
@@ -53,14 +52,18 @@ return {
     		        domoticz.devices('AllesUit').switchOn() -- clean state
     		        domoticz.devices('VerlichtingEetplaatsTafel').switchOn().afterSec(2)
     		        
-		        elseif (item.trigger == 'every 40 minutes between sunset and 22:00') then
+		        elseif (item.trigger == 'every 30 minutes between sunset and 22:00') then
 		            -- toilet sim licht toilet tussen 1 & 5 min aan
 		            domoticz.devices('VerlichtingToilet').switchOn()
 		            domoticz.devices('VerlichtingToilet').switchOff().withinMin(math.random(1,5))
 		            
-		        elseif (item.trigger == 'every 60 minutes between sunset and 22:00') then
+		        elseif (item.trigger == 'every hour between sunset and 22:00') then
 		            domoticz.devices('VerlichtingBerging').switchOn()
 		            domoticz.devices('VerlichtingBerging').switchOff().withinMin(math.random(1,2))
+		            
+		        elseif  (item.trigger == 'every 2 hours between sunset and 22:00') then -- keldertrap'
+		            domoticz.devices('VerlichtingKeldertrap').switchOn()
+		            domoticz.devices('VerlichtingKeldertrap').switchOff().withinMin(math.random(1,2))
 	            
                 elseif (item.trigger == 'at 20:50') then
                     domoticz.devices('VerlichtingNachthal').switchOn()
@@ -77,7 +80,7 @@ return {
                     domoticz.devices('VerlichtingSLKPN').switchOn().afterMin(variability+1).forMin(math.random(5,10))
                     domoticz.devices('AllesUit').switchOn()
                     
-                elseif (item.trigger == 'every 120 minutes between 23:00 and sunrise') then
+                elseif (item.trigger == 'every 2 hours between 23:00 and sunrise') then
                     domoticz.devices('VerlichtingNachthal').switchOn().afterMin(math.random(0,30)).forMin(1)
                     
                 else
