@@ -106,7 +106,7 @@ double waterFlow = 0; //l/min
 double gasFlow = 0;   //dm³/min
 unsigned long debounce_time_solar = 80; //debounce time in ms - according to spec, pulse time is 50ms
 unsigned long debounce_time_water = 500; //debounce time in ms
-unsigned long debounce_time_gas = 2000;   //debounce time in ms
+unsigned long debounce_time_gas = 3500;   //debounce time in ms
 volatile unsigned long controllerUpdateTimeStamp = 0;
 class Sensor{
   public:
