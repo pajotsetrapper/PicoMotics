@@ -151,7 +151,7 @@ Sensor wiredSensors[] = {
   */
 };
 
-long updateInterval = 300; //Minimum time between sending updates for local sensors to the controller
+long updateInterval = 30; //Minimum time between sending updates for local sensors to the controller (in seconds)
 
 MyMessage solar_power_msg(CHILD_ID_SOLAR, V_WATT);
 MyMessage solar_kWh_msg(CHILD_ID_SOLAR, V_KWH);
