@@ -68,6 +68,23 @@ class DomoticzWrapper:
         if response.status_code != 200:
             raise DomoticzException
         return response.json()
+        
+    def addUserVariable(self, vname, vtype, vval):
+        """
+            @param vname: variable name
+            @param vtype: variable type, being:
+                0 = Integer, e.g. -1, 1, 0, 2, 10 
+                1 = Float, e.g. -1.1, 1.2, 3.1
+                2 = String
+                3 = Date in format DD/MM/YYYY
+                4 = Time in 24 hr format HH:MM
+            @param vval: initial variable value
+        """
+        requestUrl = self.url + '/json.htm?type=command&param=adduservariable&vname={}&vtype={}&vvalue={}'.format(vname, vtype, vval)
+        response = requests.get(requestUrl, verify=self.verifySSL)
+        if response.status_code != 200:
+            raise DomoticzException
+        return response.json()
 
 if __name__ == '__main__':
 
@@ -121,4 +138,8 @@ if __name__ == '__main__':
     for sensor in sensorsToCreate:
         response = domoticz.createVirtualSensor(virt_hw_index, sensor.name, sensor.type)
         sensor.idx = response['idx']
-        
+          
+    domoticz.addUserVariable('gas_volume_previous_update', 1, 0)
+    
+    
+    
