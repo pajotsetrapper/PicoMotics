@@ -20,38 +20,53 @@ return {
 	-------------------------
         -- PVoutput parameters --
         -------------------------
-        local PVoutputApi = 'deadbeef0102030408060708deadbeef98765432'      -- Your PVoutput api key
+		local PVoutputApi = 'deadbeef0102030408060708deadbeef98765432'      -- Your PVoutput api key
         local PVoutputSystemID = '12345'                                    -- Your PVoutput System ID
         local PVoutputURL = 'http://pvoutput.org/service/r2/addstatus.jsp'  -- The URL to the PVoutput Service
         ------------------------
 
 		if (item.isTimer) then
-		    --local temperature = domoticz.devices('Bureau').temperature
-		    --local temperature_truncated = domoticz.round(temperature,2)
+		    local roomTemperature = domoticz.devices('Klimaat gelijkvloers').temperature
+		    local roomTemperatureTruncated = domoticz.round(roomTemperature,2)
+		    local roomHumidity = domoticz.devices('Klimaat gelijkvloers').humidity
+            local GasConversionFactor = 11.3754             -- Kwh/m³, value taken from invoice Luminus 2021-2022
             local SolarEnergy  = domoticz.devices('Zonnepanelen').WhTotal -- v1 in Watt hours (accumulated) //energy generation
             local SolarPower  = domoticz.devices('Zonnepanelen').WhActual -- v2 in Watt                     //power generation
-            local CurrentGasVolume = domoticz.devices('Gas').counter
-            local GasConversionFactor = 11.3754             -- Kwh/m³, value taken from invoice Luminus 2021-2022
+            local totalGasVolume = domoticz.devices('Gas').counter
+            local totalGasEnergy = totalGasVolume * GasConversionFactor
+            
             local GasVolumeConsumptionDuringInterval = 0    -- m³
             local GasEnergyConsumptionDurinterval = 0       -- kWh, using GasConversionFactor
-            local GasPowerDuringInterval = 0                -- Watt            
+            local GasPowerDuringInterval = 0                -- Watt
             
             if (domoticz.data.GasVolumeAtPreviousUpdate ~= nil) then
-                GasVolumeConsumptionDuringInterval = CurrentGasVolume - domoticz.data.GasVolumeAtPreviousUpdate
+                GasVolumeConsumptionDuringInterval = totalGasVolume - domoticz.data.GasVolumeAtPreviousUpdate
             end
-            domoticz.data.GasVolumeAtPreviousUpdate = CurrentGasVolume
+            domoticz.data.GasVolumeAtPreviousUpdate = totalGasVolume
             
             GasEnergyConsumptionDurinterval = GasVolumeConsumptionDuringInterval * GasConversionFactor -- in kWh
             GasPowerDuringInterval = (GasEnergyConsumptionDurinterval*3600*1000)/300 -- in Watt (script running every 300s)
 	        
-            domoticz.log('Gascounter: '.. CurrentGasVolume) --Log the accumulated m³ of gas consumed (2 decimals)
-            domoticz.log('GasVolumeConsumptionDuringInterval: '.. GasVolumeConsumptionDuringInterval) --
-            domoticz.log('GasPowerDuringInterval: '.. GasPowerDuringInterval) --
+            --domoticz.log('Gascounter: '.. totalGasVolume) --Log the accumulated m³ of gas consumed (2 decimals)
+            --domoticz.log('GasVolumeConsumptionDuringInterval: '.. GasVolumeConsumptionDuringInterval) --
+            --domoticz.log('GasPowerDuringInterval: '.. GasPowerDuringInterval) --
+            --domoticz.log('GasEnergyConsumptionDurinterval: '.. GasEnergyConsumptionDurinterval) --
+            --domoticz.log('totalGasEnergy: '.. totalGasEnergy) --
+            --domoticz.log('roomTemperatureTruncated: '.. roomTemperatureTruncated) --
+            --domoticz.log('roomHumidity: '.. roomHumidity) --
             
             -- For info on REST API: https://pvoutput.org/help.html
 			domoticz.openURL({
                                 --url = PVoutputURL..'?d='..os.date("%Y%m%d")..'&t='..os.date("%H:%M")..'&v1='..SolarEnergy..'&v2='..SolarPower..'&c1=1',
-                                url = PVoutputURL..'?d='..os.date("%Y%m%d")..'&t='..os.date("%H:%M")..'&v1='..SolarEnergy..'&v2='..SolarPower..'&c1=1'..'&v7='..CurrentGasVolume..'&v8='..GasPowerDuringInterval,
+                                url = PVoutputURL..'?d='..os.date("%Y%m%d")..'&t='..os.date("%H:%M")..
+                                    '&v1='..SolarEnergy..
+                                    '&v2='..SolarPower..
+                                    '&c1=1'..
+                                    '&v7='..totalGasVolume..
+                                    '&v8='..GasPowerDuringInterval..
+                                    '&v9='..totalGasEnergy..
+                                    '&v10='..roomTemperatureTruncated..
+                                    '&v11='..roomHumidity,
                                 method = 'GET',
                                 callback = 'triggerPVoutput',
                                 headers = { ['X-Pvoutput-Apikey'] = PVoutputApi, 
