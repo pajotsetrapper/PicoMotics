@@ -21,17 +21,17 @@ On Rules#Timer=1 do
   TaskValueSet 2,2,45 //Set humidity upper limit (hysteresis = upper-lower)
 
   //Take care of hysteresis by setting current desired humidity
-  if [Variables#Humidity]>=[Variables#HumidUpperLimit]
+  if [MQTTReader#Humidity]>=[Variables#HumidUpperLimit]
     TaskValueSet 2,3,[Variables#HumidLowerLimit]
   endif
 
-  if [Variables#Humidity]<=[Variables#HumidLowerLimit]
+  if [MQTTReader#Humidity]<=[Variables#HumidLowerLimit]
     TaskValueSet 2,3,[Variables#HumidUpperLimit]
   endif
 
 
   //Enable cooker when too dry, unless tank is empty
-  if [Variables#Humidity]<[Variables#HumidCurrentTarget] and [TankLeeg#State]=0
+  if [MQTTReader#Humidity]<[Variables#HumidCurrentTarget] and [TankLeeg#State]=0
     gpio,5,1 //enable cooker
     TaskValueSet 3,1,1
   else
